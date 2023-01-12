@@ -1,0 +1,55 @@
+﻿#include "Assets/Methods/GBFTex/Shaders/GBFTexUtils.compute"
+
+float SCL;
+
+Texture3D<half4> Vel;
+RWTexture3D<half> Div;
+RWTexture3D<half> P;
+
+#pragma kernel Divergence
+[numthreads(NUM_THREADS, NUM_THREADS, NUM_THREADS)]
+void Divergence(uint3 id : SV_DispatchThreadID)
+{
+	P[id] = 0;
+	if (Boundaries[id].a > 0) {
+		Div[id] = 0;
+		return;
+	}
+
+	half4 L, R, D, U, F, B;
+	sampleBuffer4f(Vel, id, uint3(-1, 0, 0), L);//left
+	sampleBuffer4f(Vel, id, uint3(1, 0, 0), R);//right
+	sampleBuffer4f(Vel, id, uint3(0, -1, 0), D);//down
+	sampleBuffer4f(Vel, id, uint3(0, 1, 0), U);//up
+	sampleBuffer4f(Vel, id, uint3(0, 0, -1), B);//forward
+	sampleBuffer4f(Vel, id, uint3(0, 0, 1), F);//back
+
+	/*L = Vel[id + uint3(-1, 0, 0)].xyz;
+	R = Vel[id + uint3(1, 0, 0)].xyz;
+	D = Vel[id + uint3(0, -1, 0)].xyz;
+	U = Vel[id + uint3(0, 1, 0)].xyz;
+	B = Vel[id + uint3(0, 0, -1)].xyz;
+	F = Vel[id + uint3(0, 0, 1)].xyz;
+
+	if (Boundaries[id + uint3(-1, 0, 0)].a > 0) {
+		L = Boundaries[id + uint3(-1, 0, 0)].xyz;
+	}
+	if (Boundaries[id + uint3(1, 0, 0)].a > 0) {
+		R = Boundaries[id + uint3(1, 0, 0)].xyz;
+	}
+	if (Boundaries[id + uint3(0, -1, 0)].a > 0) {
+		D = Boundaries[id + uint3(0, -1, 0)].xyz;
+	}
+	if (Boundaries[id + uint3(0, 1, 0)].a > 0) {
+		U = Boundaries[id + uint3(0, 1, 0)].xyz;
+	}
+	if (Boundaries[id + uint3(0, 0, -1)].a > 0) {
+		B = Boundaries[id + uint3(0, 0, -1)].xyz;
+	}
+	if (Boundaries[id + uint3(0, 0, 1)].a > 0) {
+		F = Boundaries[id + uint3(0, 0, 1)].xyz;
+	}*/
+
+	Div[id] = SCL * ((R.x - L.x) + (U.y - D.y) + (F.z - B.z));
+}
+

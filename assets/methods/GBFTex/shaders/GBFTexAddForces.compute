@@ -1,0 +1,26 @@
+﻿#include "Assets/Methods/GBFTex/Shaders/GBFTexUtils.compute"
+
+float DT;
+float Ambient;
+
+Texture3D<half> Temp;
+Texture3D<half> Dens;
+
+Texture3D<half4> VelRead;
+RWTexture3D<half4> VelWrite;
+
+#pragma kernel CSMain
+[numthreads(NUM_THREADS, NUM_THREADS, NUM_THREADS)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+	half3 vel = VelRead[id].xyz;
+
+	if (Temp[id] > Ambient) {
+		vel += (Temp[id] - Ambient) * half3(0, 1, 0) * DT;
+	}
+	if (Dens[id] > 0) {
+		vel += (0.001f * Dens[id]) * half3(0, 1, 0) * DT;
+	}
+
+	VelWrite[id] = half4(vel, 0);
+}

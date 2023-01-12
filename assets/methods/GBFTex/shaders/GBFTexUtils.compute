@@ -1,0 +1,34 @@
+﻿#define NUM_THREADS 8
+#define N 128
+Texture3D<half4> Boundaries;
+
+bool sampleBuffer1f(Texture3D<half> s, uint3 pos, uint3 offset, out half res) {
+	uint3 samplepos;
+	samplepos.x = min(pos.x + offset.x, N - 1);
+	samplepos.y = min(pos.y + offset.y, N - 1);
+	samplepos.z = min(pos.z + offset.z, N - 1);
+
+	if (!Boundaries[samplepos].a > 0) {
+		res = s[samplepos];
+		return false;
+	}
+	res = s[pos];
+	return true;
+}
+
+bool sampleBuffer4f(Texture3D<half4> s, uint3 pos, uint3 offset, out half4 res) {
+	uint3 samplepos;
+	samplepos.x = min(pos.x + offset.x, N - 1);
+	samplepos.y = min(pos.y + offset.y, N - 1);
+	samplepos.z = min(pos.z + offset.z, N - 1);
+
+	if (!Boundaries[samplepos].a > 0) {
+		res = s[samplepos];
+		return false;
+	}
+	res = -s[pos];
+	if (length(Boundaries[samplepos].rgb) > 0) {
+		res = half4(Boundaries[samplepos].rgb, 0);
+	}
+	return true;
+}

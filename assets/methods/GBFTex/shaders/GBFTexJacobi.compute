@@ -1,0 +1,48 @@
+﻿#include "Assets/Methods/GBFTex/Shaders/GBFTexUtils.compute"
+
+Texture3D<half> ConstField;
+Texture3D<half> XRead;
+RWTexture3D<half> XWrite;
+
+#pragma kernel DiffuseScalarWDiv
+[numthreads(NUM_THREADS, NUM_THREADS, NUM_THREADS)]
+void DiffuseScalarWDiv(uint3 id : SV_DispatchThreadID)
+{
+	half L, R, D, U, B, F, Div;
+	sampleBuffer1f(XRead, id, uint3(-1, 0, 0), L);
+	sampleBuffer1f(XRead, id, uint3(1, 0, 0), R);
+	sampleBuffer1f(XRead, id, uint3(0, -1, 0), D);
+	sampleBuffer1f(XRead, id, uint3(0, 1, 0), U);
+	sampleBuffer1f(XRead, id, uint3(0, 0, -1), B);
+	sampleBuffer1f(XRead, id, uint3(0, 0, 1), F);
+
+	/*L = XRead[id + uint3(-1, 0, 0)];
+	R = XRead[id + uint3( 1, 0, 0)];
+	D = XRead[id + uint3( 0,-1, 0)];
+	U = XRead[id + uint3( 0, 1, 0)];
+	B = XRead[id + uint3( 0, 0,-1)];
+	F = XRead[id + uint3( 0, 0, 1)];
+
+	if (Boundaries[id + uint3(-1, 0, 0)].a > 0) {
+		L = XRead[id];
+	}
+	if (Boundaries[id + uint3(1, 0, 0)].a > 0) {
+		R = XRead[id];
+	}
+	if (Boundaries[id + uint3(0, -1, 0)].a > 0) {
+		D = XRead[id];
+	}
+	if (Boundaries[id + uint3(0, 1, 0)].a > 0) {
+		U = XRead[id];
+	}
+	if (Boundaries[id + uint3(0, 0, -1)].a > 0) {
+		B = XRead[id];
+	}
+	if (Boundaries[id + uint3(0, 0, 1)].a > 0) {
+		F = XRead[id];
+	}*/
+
+	Div = ConstField[id];
+
+	XWrite[id] = (L + R + D + U + B + F - Div) / 6.0;
+}

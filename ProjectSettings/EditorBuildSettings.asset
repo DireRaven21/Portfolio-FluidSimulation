@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1045 &1
+EditorBuildSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Scenes:
+  - enabled: 0
+    path: Assets/Scenes/GBF1.unity
+    guid: 99c9720ab356a0642a771bea13969a05
+  - enabled: 0
+    path: Assets/Scenes/GBF2.unity
+    guid: 7f00230a83dce8f4f9d0b35948532ec4
+  - enabled: 1
+    path: Assets/Scenes/GBFTex.unity
+    guid: 820c103be07feab42bd9693006d92bc4
+  - enabled: 0
+    path: Assets/Scenes/GBFTest1.unity
+    guid: 05af307f8712c0045b0c3c55467ce128
+  - enabled: 0
+    path: Assets/Scenes/GBFTest2.unity
+    guid: f59ebe6556a378b4089526db1a9aa336
+  m_configObjects: {}

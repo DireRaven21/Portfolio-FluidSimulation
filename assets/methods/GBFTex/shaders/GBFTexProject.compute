@@ -1,0 +1,111 @@
+﻿#include "Assets/Methods/GBFTex/Shaders/GBFTexUtils.compute"
+
+float SCL;
+
+Texture3D<half> Pressure;
+Texture3D<half4> VelRead;
+RWTexture3D<half4> VelWrite;
+
+#pragma kernel gradient
+[numthreads(NUM_THREADS, NUM_THREADS, NUM_THREADS)]
+void gradient(uint3 id : SV_DispatchThreadID)
+{
+	if (Boundaries[id].a > 0)
+	{
+		VelWrite[id] = half4(0, 0, 0, 0);
+		return;
+	}
+
+	half PL, PR, PD, PU, PB, PF;
+	half3 mask = half3(0, 0, 0);
+	if (sampleBuffer1f(Pressure, id, uint3(-1, 0, 0), PL)) {
+		mask.x = -1;
+	}
+	if (sampleBuffer1f(Pressure, id, uint3(1, 0, 0), PR)) {
+		mask.x = 1;
+	}
+	if (sampleBuffer1f(Pressure, id, uint3(0, -1, 0), PD)) {
+		mask.y = -1;
+	}
+	if (sampleBuffer1f(Pressure, id, uint3(0, 1, 0), PU)) {
+		mask.y = 1;
+	}
+	if (sampleBuffer1f(Pressure, id, uint3(0, 0, -1), PB)) {
+		mask.z = -1;
+	}
+	if (sampleBuffer1f(Pressure, id, uint3(0, 0, 1), PF)) {
+		mask.z = 1;
+	}
+
+	
+	half3 vel = VelRead[id].xyz;
+	vel -= half3(PR - PL, PU - PD, PF - PB) * SCL;
+
+	if ((vel.x < 0 && mask.x < 0) || (vel.x > 0 && mask.x > 0)) {
+		vel.x == 0;
+	}
+	if ((vel.y < 0 && mask.y < 0) || (vel.y > 0 && mask.y > 0)) {
+		vel.y == 0;
+	}
+	if ((vel.z < 0 && mask.z < 0) || (vel.z > 0 && mask.z > 0)) {
+		vel.z == 0;
+	}
+
+	/*half3 obstvel = half3(0, 0, 0);
+	half3 mask = half3(1, 1, 1);
+
+	PL = Pressure[id + uint3(-1, 0, 0)];
+	PR = Pressure[id + uint3(1, 0, 0)];
+	PD = Pressure[id + uint3(0, -1, 0)];
+	PU = Pressure[id + uint3(0, 1, 0)];
+	PB = Pressure[id + uint3(0, 0, -1)];
+	PF = Pressure[id + uint3(0, 0, 1)];
+
+	if (Boundaries[id + uint3(-1, 0, 0)].a > 0) {
+		PL = Pressure[id];
+		obstvel.x = Boundaries[id + uint3(-1, 0, 0)].xyz;
+		mask.x = 0;
+	}
+	if (Boundaries[id + uint3(1, 0, 0)].a > 0) {
+		PR = Pressure[id];
+		obstvel.x = Boundaries[id + uint3(1, 0, 0)].xyz;
+		mask.x = 0;
+	}
+	if (Boundaries[id + uint3(0, -1, 0)].a > 0) {
+		PD = Pressure[id];
+		obstvel.y = Boundaries[id + uint3(0, -1, 0)].xyz;
+		mask.y = 0;
+	}
+	if (Boundaries[id + uint3(0, 1, 0)].a > 0) {
+		PU = Pressure[id];
+		obstvel.y = Boundaries[id + uint3(0, 1, 0)].xyz;
+		mask.y = 0;
+	}
+	if (Boundaries[id + uint3(0, 0, -1)].a > 0) {
+		PB = Pressure[id];
+		obstvel.z = Boundaries[id + uint3(0, 0, -1)].xyz;
+		mask.z = 0;
+	}
+	if (Boundaries[id + uint3(0, 0, 1)].a > 0) {
+		PF = Pressure[id];
+		obstvel.z = Boundaries[id + uint3(0, 0, 1)].xyz;
+		mask.z = 0;
+	}
+
+	half3 vel = VelRead[id].xyz;
+	vel -= half3(PR - PL, PU - PD, PF - PB) * SCL;
+
+	if ((vel.x < 0 && mask.x < 0) || (vel.x > 0 && mask.x > 0)) {
+		vel.x == 0;
+	}
+	if ((vel.y < 0 && mask.y < 0) || (vel.y > 0 && mask.y > 0)) {
+		vel.y == 0;
+	}
+	if ((vel.z < 0 && mask.z < 0) || (vel.z > 0 && mask.z > 0)) {
+		vel.z == 0;
+	}
+	vel += obstvel;*/
+
+	VelWrite[id] = half4(vel, 0);
+}
+

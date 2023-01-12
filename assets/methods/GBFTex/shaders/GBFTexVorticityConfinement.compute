@@ -1,0 +1,51 @@
+﻿#include "Assets/Methods/GBFTex/Shaders/GBFTexUtils.compute"
+
+float DT;
+float Epsilon;
+
+Texture3D<half4> Vel;
+RWTexture3D<half4> VelWrite;
+RWTexture3D<half4> Vorticy;
+
+#pragma kernel calcVorticy
+[numthreads(NUM_THREADS, NUM_THREADS, NUM_THREADS)]
+void calcVorticy(uint3 id : SV_DispatchThreadID)
+{
+	half3 L, R, D, U, F, B;
+	L = Vel[uint3(id.x - 1, id.y, id.z)].xyz;
+	R = Vel[uint3(id.x + 1, id.y, id.z)].xyz;
+	D = Vel[uint3(id.x, id.y - 1, id.z)].xyz;
+	U = Vel[uint3(id.x, id.y + 1, id.z)].xyz;
+	B = Vel[uint3(id.x, id.y, id.z - 1)].xyz;
+	F = Vel[uint3(id.x, id.y, id.z + 1)].xyz;
+
+	half3 v = 0.5 * half3(((U.z - D.z) - (F.y - B.y)), ((F.x - B.x) - (R.z - L.z)), ((R.y - L.y) - (U.x - D.x)));
+	Vorticy[id] = half4(v, 0);
+}
+
+#pragma kernel calcConfinement
+[numthreads(NUM_THREADS, NUM_THREADS, NUM_THREADS)]
+void calcConfinement(uint3 id : SV_DispatchThreadID)
+{
+	half3 Omega;
+	half3 L, R, D, U, F, B;
+	half OmegaL, OmegaR, OmegaU, OmegaD, OmegaF, OmegaB;
+	Omega = Vorticy[id].xyz;
+
+	OmegaL = length(Vorticy[uint3(id.x - 1, id.y, id.z)].xyz);
+	OmegaR = length(Vorticy[uint3(id.x + 1, id.y, id.z)].xyz);
+	OmegaU = length(Vorticy[uint3(id.x, id.y + 1, id.z)].xyz);
+	OmegaD = length(Vorticy[uint3(id.x, id.y - 1, id.z)].xyz);
+	OmegaF = length(Vorticy[uint3(id.x, id.y, id.z + 1)].xyz);
+	OmegaB = length(Vorticy[uint3(id.x, id.y, id.z - 1)].xyz);
+
+	half3 eta = 0.5 * half3(OmegaR - OmegaL, OmegaU - OmegaD, OmegaF - OmegaB);
+	eta = normalize(eta + half3(0.0001, 0.0001, 0.0001));
+
+	half3 force = half3(eta.y * Omega.z - eta.z * Omega.y, eta.z * Omega.x - eta.x * Omega.z, eta.x * Omega.y - eta.y * Omega.x) * DT * Epsilon;
+
+	half3 vel = Vel[id].xyz;
+	vel += force;
+
+	VelWrite[id] = half4(vel, 0);
+}

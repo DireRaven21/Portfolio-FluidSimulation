@@ -1,0 +1,346 @@
+﻿#define N 128
+
+struct AABB {
+	float3 min;
+	float3 max;
+};
+
+struct TRIANGLE {
+	float3 v[3];
+	float3 normal;
+	AABB bounds;
+};
+struct BOX {
+	float3 center;
+	AABB bounds;
+
+	int children[8];
+};
+
+uint _NumTriangles;
+
+float4x4 _Matrix;
+
+float3 _Velocity;
+
+StructuredBuffer<float3> _Vertices;
+StructuredBuffer<int> _Triangles;
+
+Texture3D<half4> _Static;
+RWTexture3D<half4> _Result;
+
+TRIANGLE getTriangle(uint id) {
+	uint i = _Triangles[(id * 3)];
+	uint j = _Triangles[(id * 3) + 1];
+	uint k = _Triangles[(id * 3) + 2];
+
+	TRIANGLE t;
+	t.v[0] = mul(_Matrix, float4(_Vertices[i], 1)).xyz;
+	t.v[1] = mul(_Matrix, float4(_Vertices[j], 1)).xyz;
+	t.v[2] = mul(_Matrix, float4(_Vertices[k], 1)).xyz;
+
+	t.normal = normalize(cross(t.v[1] - t.v[0], t.v[2] - t.v[0]));
+
+	t.bounds.min = min(t.v[0], min(t.v[1], t.v[2]));
+	t.bounds.max = max(t.v[0], max(t.v[1], t.v[2]));
+
+	return t;
+}
+BOX getVoxel(uint3 id) {
+	BOX v;
+
+	v.center = (float3)id;
+	v.bounds.min = (((float3) id) - 0.5);
+	v.bounds.max = (((float3) id) + 0.5);
+	return v;
+}
+bool checkVoxelIntersection(BOX vox, TRIANGLE tri) {
+	float3 A = tri.v[0] - vox.center;
+	float3 B = tri.v[1] - vox.center;
+	float3 C = tri.v[2] - vox.center;
+
+	float rr = 0.25;
+
+	float3 V = cross(B - A, C - A);
+	float d = dot(A, V);
+	float e = dot(V, V);
+	bool sep1 = d * d > rr * e;
+
+	float aa = dot(A, A);
+	float ab = dot(A, B);
+	float ac = dot(A, C);
+	float bb = dot(B, B);
+	float bc = dot(B, C);
+	float cc = dot(C, C);
+
+	bool sep2 = (aa > rr) && (ab > aa) && (ac > aa);
+	bool sep3 = (bb > rr) && (ab > bb) && (bc > bb);
+	bool sep4 = (cc > rr) && (ac > cc) && (bc > cc);
+
+	float3 AB = B - A;
+	float3 BC = C - B;
+	float3 CA = A - C;
+
+	float d1 = ab - aa;
+	float d2 = bc - bb;
+	float d3 = ac - cc;
+
+	float e1 = dot(AB, AB);
+	float e2 = dot(BC, BC);
+	float e3 = dot(CA, CA);
+
+	float3 Q1 = A * e1 - d1 * AB;
+	float3 Q2 = B * e2 - d2 * BC;
+	float3 Q3 = C * e3 - d3 * CA;
+	float3 QC = C * e1 - Q1;
+	float3 QA = A * e2 - Q2;
+	float3 QB = B * e3 - Q3;
+
+	bool sep5 = (dot(Q1, Q1) > rr * e1 * e1) && (dot(Q1, QC) > 0);
+	bool sep6 = (dot(Q2, Q2) > rr * e2 * e2) && (dot(Q2, QA) > 0);
+	bool sep7 = (dot(Q3, Q3) > rr * e3 * e3) && (dot(Q3, QB) > 0);
+
+	return !(sep1 || sep2 || sep3 || sep4 || sep5 || sep6 || sep7);
+}
+bool checkBoxIntersection(BOX box, TRIANGLE tri) {
+	float3 extents = box.bounds.max - box.center;
+
+	float d = dot(tri.v[0], tri.normal);
+	float r = dot(extents, abs(tri.normal));
+
+	float dist = dot(tri.normal, box.center) - d;
+	return abs(dist) <= r;
+}
+BOX createBox(float3 min, float3 max) {
+	max = ceil(max);
+	min = floor(min);
+
+	BOX box;
+	box.center = min + (float3(max.x - min.x, max.y - min.y, max.z - min.z) * 0.5);
+	box.bounds.min = min;
+	box.bounds.max = max;
+
+	box.children[0] = -1;
+	box.children[1] = -1;
+	box.children[2] = -1;
+	box.children[3] = -1;
+
+	box.children[4] = -1;
+	box.children[5] = -1;
+	box.children[6] = -1;
+	box.children[7] = -1;
+
+	return box;
+}
+
+#pragma kernel CSClear
+[numthreads(8, 8, 8)]
+void CSClear(uint3 id : SV_DispatchThreadID)
+{
+
+	_Result[id] = _Static[id];
+}
+
+#pragma kernel CSEnclosedBoundary
+[numthreads(8, 8, 8)]
+void CSEnclosedBoundary(uint3 id : SV_DispatchThreadID) {
+	_Result[id] = float4(0, 0, 0, 0);
+	if (id.x == 0) {
+		_Result[id] = float4(0, 0, 0, 1);
+	}
+	if (id.x == N - 1) {
+		_Result[id] = float4(0, 0, 0, 1);
+	}
+
+	if (id.y == 0) {
+		_Result[id] = float4(0, 0, 0, 1);
+	}
+	if (id.y == N - 1) {
+		_Result[id] = float4(0, 0, 0, 1);
+	}
+
+	if (id.z == 0) {
+		_Result[id] = float4(0, 0, 0, 1);
+	}
+	if (id.z == N - 1) {
+		_Result[id] = float4(0, 0, 0, 1);
+	}
+}
+
+#pragma kernel CSTriangle
+[numthreads(8, 1, 1)]
+void CSTriangle(uint3 id : SV_DispatchThreadID)
+{
+	TRIANGLE tri = getTriangle(id.x);
+
+	int minx = max(0, floor(tri.bounds.min.x) - 1);
+	int miny = max(0, floor(tri.bounds.min.y) - 1);
+	int minz = max(0, floor(tri.bounds.min.z) - 1);
+
+	int maxx = min(N, ceil(tri.bounds.max.x) + 1);
+	int maxy = min(N, ceil(tri.bounds.max.y) + 1);
+	int maxz = min(N, ceil(tri.bounds.max.z) + 1);
+
+	if ((minx > N || miny > N || minz > N) || (maxx < 0 || maxy < 0 || maxz < 0)) {
+		return;
+	}
+
+	for (int x = minx; x < maxx; x++) {
+		for (int y = miny; y < maxy; y++) {
+			for (int z = minz; z < maxz; z++) {
+				uint3 idx = uint3(x, y, z);
+				BOX cell = getVoxel(idx);
+				if (checkVoxelIntersection(cell, tri)) {
+					_Result[idx] = half4(_Velocity.xyz, 1);
+				}
+			}
+		}
+	}
+
+	/*int box_count = 1;
+
+	BOX b = createBox(float3(minx, miny, minz), float3(maxx, maxy, maxz));
+	float3 l = b.bounds.max - b.bounds.min;
+
+	BOX boxes[64];
+	BOX hits[64];
+
+	boxes[0] = b;
+
+	if (l.x > 1 && l.y > 1 && l.z > 1) {
+		float3 CU, CD, CF, CB, CL, CR, MinU, MaxD, MinR, MaxL, MinF, MaxB;
+		CU = float3(b.center.x, b.bounds.max.y, b.center.z);
+		CD = float3(b.center.x, b.bounds.min.y, b.center.z);
+		CF = float3(b.center.xy, b.bounds.max.z);
+		CB = float3(b.center.xy, b.bounds.min.z);
+		CR = float3(b.bounds.max.x, b.center.yz);
+		CL = float3(b.bounds.min.x, b.center.yz);
+
+		MinU = float3(b.bounds.min.x, b.center.y, b.bounds.min.z);
+		MaxD = float3(b.bounds.max.x, b.center.y, b.bounds.max.z);
+		MaxL = float3(b.center.x, b.bounds.max.yz);
+		MinR = float3(b.center.x, b.bounds.min.yz);
+		MaxB = float3(b.bounds.max.xy, b.center.z);
+		MinF = float3(b.bounds.min.xy, b.center.z);
+
+		boxes[0] = createBox(b.bounds.min, b.center);
+		boxes[1] = createBox(MinR, CR);
+		boxes[2] = createBox(MinF, CF);
+		boxes[3] = createBox(CD, MaxD);
+
+		boxes[4] = createBox(MinU, CU);
+		boxes[5] = createBox(CB, MaxB);
+		boxes[6] = createBox(CL, MaxL);
+		boxes[7] = createBox(b.center, b.bounds.max);
+
+		box_count = 8;
+	}
+	else if (l.x > 1 && l.y > 1) {
+		float3 CF, CB, MinU, MaxD, MinR, MaxL, MinF, MaxB;
+		CF = float3(b.center.xy, b.bounds.max.z);
+		CB = float3(b.center.xy, b.bounds.min.z);
+
+		MinU = float3(b.bounds.min.x, b.center.y, b.bounds.min.z);
+		MaxD = float3(b.bounds.max.x, b.center.y, b.bounds.max.z);
+		MaxL = float3(b.center.x, b.bounds.max.yz);
+		MinR = float3(b.center.x, b.bounds.min.yz);
+		MaxB = float3(b.bounds.max.xy, b.center.z);
+		MinF = float3(b.bounds.min.xy, b.center.z);
+
+		boxes[0] = createBox(b.bounds.min, CF);
+		boxes[1] = createBox(MinR, MaxD);
+		boxes[2] = createBox(MinU, MaxL);
+		boxes[3] = createBox(CB, b.bounds.max);
+		box_count = 4;
+	}
+	else if (l.x > 1 && l.z > 1) {
+		float3 CU, CD, MinU, MaxD, MinR, MaxL, MinF, MaxB;
+		CU = float3(b.center.x, b.bounds.max.y, b.center.z);
+		CD = float3(b.center.x, b.bounds.min.y, b.center.z);
+
+		MinU = float3(b.bounds.min.x, b.bounds.max.y, b.bounds.min.z);
+		MaxD = float3(b.bounds.max.x, b.bounds.min.y, b.bounds.max.z);
+		MaxL = float3(b.center.x, b.bounds.max.yz);
+		MinR = float3(b.center.x, b.bounds.min.yz);
+		MaxB = float3(b.bounds.max.xy, b.center.z);
+		MinF = float3(b.bounds.min.xy, b.center.z);
+
+		boxes[0] = createBox(b.bounds.min, CU);
+		boxes[1] = createBox(MinR, MaxB);
+		boxes[2] = createBox(MinF, MaxL);
+		boxes[3] = createBox(CD, b.bounds.max);
+		box_count = 4;
+
+	}
+	else if (l.z > 1 && l.y > 1) {
+		float3 CL, CR, MinU, MaxD, MinR, MaxL, MinF, MaxB;
+		CR = float3(b.bounds.max.x, b.center.yz);
+		CL = float3(b.bounds.min.x, b.center.yz);
+
+		MinU = float3(b.bounds.min.x, b.center.y, b.bounds.min.z);
+		MaxD = float3(b.bounds.max.x, b.center.y, b.bounds.max.z);
+		MaxL = float3(b.bounds.min.x, b.bounds.max.yz);
+		MinR = float3(b.bounds.max.x, b.bounds.min.yz);
+		MaxB = float3(b.bounds.max.xy, b.center.z);
+		MinF = float3(b.bounds.min.xy, b.center.z);
+
+		boxes[0] = createBox(b.bounds.min, CR);
+		boxes[1] = createBox(MinU, MaxB);
+		boxes[2] = createBox(MinF, MaxD);
+		boxes[3] = createBox(CL, b.bounds.max);
+		box_count = 4;
+
+	}
+	else if (l.x > 1) {
+		float3 MinR, MaxL;
+		MaxL = float3(b.bounds.min.x, b.bounds.max.yz);
+		MinR = float3(b.bounds.max.x, b.bounds.min.yz);
+
+		boxes[0] = createBox(b.bounds.min, MaxL);
+		boxes[1] = createBox(MinR, b.bounds.max);
+		box_count = 2;
+
+	}
+	else if (l.y > 1) {
+		float3 MinU, MaxD;
+		MinU = float3(b.bounds.min.x, b.center.y, b.bounds.min.z);
+		MaxD = float3(b.bounds.max.x, b.center.y, b.bounds.max.z);
+
+		boxes[0] = createBox(b.bounds.min, MaxD);
+		boxes[1] = createBox(MinU, b.bounds.max);
+		box_count = 2;
+	}
+	else if (l.z > 1) {
+		float3 MinF, MaxB;
+		MaxB = float3(b.bounds.max.xy, b.center.z);
+		MinF = float3(b.bounds.min.xy, b.center.z);
+
+		boxes[0] = createBox(b.bounds.min, MaxB);
+		boxes[1] = createBox(MinF, b.bounds.max);
+		box_count = 2;
+	}
+
+	int hit_count = 0;
+	for (int i = 0; i < box_count; i++) {
+		BOX box = boxes[i];
+		if (checkBoxIntersection(box, tri)) {
+			hit_count++;
+			hits[hit_count - 1] = boxes[i];
+		}
+	}
+
+	for (int j = 0; j < hit_count; j++) {
+		for (int x = hits[j].bounds.min.x; x < hits[j].bounds.max.x; x++) {
+			for (int y = hits[j].bounds.min.y; y < hits[j].bounds.max.y; y++) {
+				for (int z = hits[j].bounds.min.z; z < hits[j].bounds.max.z; z++) {
+					uint3 idx = uint3(x, y, z);
+					BOX cell = getVoxel(idx);
+					if (checkVoxelIntersection(cell, tri)) {
+						_Result[idx] = half4(0, 0, 0, 1);
+					}
+				}
+			}
+		}
+	}*/
+}
+

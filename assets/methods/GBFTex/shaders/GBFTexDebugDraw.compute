@@ -1,0 +1,35 @@
+﻿#include "Assets/Methods/GBFTex/Shaders/GBFTexUtils.compute"
+
+#pragma kernel CSMain
+
+Texture3D<float> Dens;
+Texture3D<float> Temp;
+Texture3D<float4> Vel;
+RWTexture2D<float4> Result;
+
+[numthreads(NUM_THREADS, NUM_THREADS, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+	float r, g, b;
+	r = 0;
+	g = 0;
+	b = 0;
+
+	for (unsigned int i = 0; i < N; i++) {
+		uint3 idx = uint3(id.x, id.y, i);
+		//r += Vel[idx].x;
+		//g += Vel[idx].y;
+		//b += Vel[idx].z;
+		
+		r += Dens[idx];
+		g = r;
+		b = r;
+	}
+
+	/*uint3 idx2 = uint3(id.x, id.y, 32);
+	r = Vel[idx2].x;
+	g = Vel[idx2].y;
+	b = Vel[idx2].z;*/
+
+	Result[id.xy] = float4(r, g, b, 1.0);
+}

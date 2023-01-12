@@ -1,0 +1,24 @@
+﻿#include "Assets/Methods/GBFTex/Shaders/GBFTexUtils.compute"
+
+float DT;
+float3 Center;
+float Ammount;
+float Radius;
+
+Texture3D<float> DensRead;
+RWTexture3D<float> DensWrite;
+
+#pragma kernel CSMain
+[numthreads(NUM_THREADS, NUM_THREADS, NUM_THREADS)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+	float d = DensRead[id];
+
+	float3 pos = Center - ((float3)id);
+	float l = length(pos) / (Radius * N);
+	if (l < 1) {
+		d += (Ammount / N) * DT * (1 - l);
+	}
+
+	DensWrite[id] = d;
+}

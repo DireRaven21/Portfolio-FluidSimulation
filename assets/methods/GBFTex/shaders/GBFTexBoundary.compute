@@ -1,0 +1,42 @@
+﻿#include "Assets/Methods/GBFTex/Shaders/GBFTexUtils.compute"
+
+float3 objpos;
+float3 objvel;
+float radius;
+
+RWTexture3D<half4> BoundariesWrite;
+
+#pragma kernel CSMain
+[numthreads(NUM_THREADS, NUM_THREADS, NUM_THREADS)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+	BoundariesWrite[id] = half4(0, 0, 0, 0);
+	if (id.x == 0) {
+		BoundariesWrite[id] = half4(0, 0, 0, 1);
+	}
+	if (id.x == N - 1) {
+		BoundariesWrite[id] = half4(0, 0, 0, 1);
+	}
+
+	if (id.y == 0) {
+		BoundariesWrite[id] = half4(0, 0, 0, 1);
+	}
+	if (id.y == N - 1) {
+		BoundariesWrite[id] = half4(0, 0, 0, 1);
+	}
+
+	if (id.z == 0) {
+		BoundariesWrite[id] = half4(0, 0, 0, 1);
+	}
+	if (id.z == N - 1) {
+		BoundariesWrite[id] = half4(0, 0, 0, 1);
+	}
+
+	float3 pos = ((float3)id) - objpos * N;
+	bool isInSphere = length(pos) < radius;
+	if (isInSphere) {
+		//BoundariesWrite[id] = float4(normalize(pos) * length(objvel), 1);
+		BoundariesWrite[id] = float4(objvel, 1);
+	}
+}
+

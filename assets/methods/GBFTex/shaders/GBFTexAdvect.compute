@@ -1,0 +1,128 @@
+﻿#include "Assets/Methods/GBFTex/Shaders/GBFTexUtils.compute"
+
+float DT;
+float SCL;
+float Decay;
+float Min;
+
+Texture3D<half4> Vel;
+Texture3D<half4> VectorQtyRead;
+RWTexture3D<half4> VectorQtyWrite;
+
+SamplerState samplerVectorQtyRead {
+	Filter = MIN_MAG_MIP_LINEAR;
+	AddressU = Clamp;
+	AddressV = Clamp;
+	AddressW = Clamp;
+};
+
+#pragma kernel AdvectVector
+[numthreads(NUM_THREADS, NUM_THREADS, NUM_THREADS)]
+void AdvectVector(uint3 id : SV_DispatchThreadID)
+{
+	half3 pos = ((half3)id) - Vel[id].xyz * DT * SCL;
+	pos += 0.5;
+	pos = pos / N;
+
+	if (Boundaries[id].a > 0)
+	{
+		VectorQtyWrite[id] = half4(0, 0, 0, 0);
+		return;
+	}
+	half3 vel = VectorQtyRead.SampleLevel(samplerVectorQtyRead, pos, 0).xyz;
+	VectorQtyWrite[id] = half4(vel, 0);
+}
+
+Texture3D<half> ScalarQtyRead;
+RWTexture3D<half> ScalarQtyWrite;
+
+SamplerState samplerScalarQtyRead {
+	Filter = MIN_MAG_MIP_LINEAR;
+	AddressU = Clamp;
+	AddressV = clamp;
+	AddressW = Clamp;
+};
+
+#pragma kernel AdvectScalar
+[numthreads(NUM_THREADS, NUM_THREADS, NUM_THREADS)]
+void AdvectScalar(uint3 id : SV_DispatchThreadID)
+{
+	half3 pos = ((half3)id) - Vel[id].xyz * DT * SCL;
+	pos += 0.5;
+	pos = pos / N;
+
+	if (Boundaries[id].a > 0)
+	{
+		ScalarQtyWrite[id] = 0;
+		return;
+	}
+
+	ScalarQtyWrite[id] = max(0, ScalarQtyRead.SampleLevel(samplerScalarQtyRead, pos, 0) - Decay * DT);
+}
+
+Texture3D<half>phi_n_hat_1f;
+Texture3D<half>phi_n1_hat_1f;
+
+SamplerState samplerphi_n1_hat_1f {
+	Filter = MIN_MAG_MIP_LINEAR;
+	AddressU = Clamp;
+	AddressV = clamp;
+	AddressW = Clamp;
+};
+
+#pragma kernel AdvectScalarMacCormack
+[numthreads(NUM_THREADS, NUM_THREADS, NUM_THREADS)]
+void AdvectScalarMacCormack(uint3 id : SV_DispatchThreadID) {
+
+	half3 pos = ((half3)id) - Vel[id].xyz * DT;
+
+	if (Boundaries[id].a > 0)
+	{
+		ScalarQtyWrite[id] = 0;
+		return;
+	}
+
+	half res = 0;
+	if (Boundaries[uint3(id.x - 1, id.y, id.z)].a > 0 ||
+		Boundaries[uint3(id.x + 1, id.y, id.z)].a > 0 ||
+		Boundaries[uint3(id.x, id.y - 1, id.z)].a > 0 ||
+		Boundaries[uint3(id.x, id.y + 1, id.z)].a > 0 ||
+		Boundaries[uint3(id.x, id.y, id.z - 1)].a > 0 ||
+		Boundaries[uint3(id.x, id.y, id.z + 1)].a > 0
+		) {
+		pos += 0.5;
+		pos = pos / N;
+		res = ScalarQtyRead.SampleLevel(samplerScalarQtyRead, pos, 0);
+	}
+	else
+	{
+		uint X = floor(pos.x);
+		uint Y = floor(pos.y);
+		uint Z = floor(pos.z);
+
+		uint X1 = min(X + 1, N - 1);
+		uint Y1 = min(Y + 1, N - 1);
+		uint Z1 = min(Z + 1, N - 1);
+
+		half A, B, C, D, E, F, G, H;
+
+		A = ScalarQtyRead[uint3(X, Y, Z)];
+		B = ScalarQtyRead[uint3(X1, Y, Z)];
+		C = ScalarQtyRead[uint3(X, Y1, Z)];
+		D = ScalarQtyRead[uint3(X1, Y1, Z)];
+
+		E = ScalarQtyRead[uint3(X, Y, Z1)];
+		F = ScalarQtyRead[uint3(X1, Y, Z1)];
+		G = ScalarQtyRead[uint3(X, Y1, Z1)];
+		H = ScalarQtyRead[uint3(X1, Y1, Z1)];
+
+		half phi_min = min(min(min(min(min(min(min(A, B), C), D), E), F), G), H);
+		half phi_max = max(max(max(max(max(max(max(A, B), C), D), E), F), G), H);
+
+		pos += 0.5;
+		pos = pos / N;
+		res = phi_n1_hat_1f.SampleLevel(samplerphi_n1_hat_1f, pos, 0) + 0.5 * (ScalarQtyRead[id] - phi_n_hat_1f[id]);
+		res = max(min(res, phi_max), phi_min);
+	}
+	ScalarQtyWrite[id] = max(0, res - Decay * DT);
+}
